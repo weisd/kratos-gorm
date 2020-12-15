@@ -15,43 +15,10 @@ import (
 
 var _cacheStore = &sync.Map{}
 
-func prepareValues(values []interface{}, db *gorm.DB, columnTypes []*sql.ColumnType, columns []string) {
-	if db.Statement.Schema != nil {
-		for idx, name := range columns {
-			if field := db.Statement.Schema.LookUpField(name); field != nil {
-				values[idx] = reflect.New(reflect.PtrTo(field.FieldType)).Interface()
-				continue
-			}
-			values[idx] = new(interface{})
-		}
-	} else if len(columnTypes) > 0 {
-		for idx, columnType := range columnTypes {
-			if columnType.ScanType() != nil {
-				values[idx] = reflect.New(reflect.PtrTo(columnType.ScanType())).Interface()
-			} else {
-				values[idx] = new(interface{})
-			}
-		}
-	} else {
-		for idx := range columns {
-			values[idx] = new(interface{})
-		}
-	}
-}
-
-func scanIntoMap(mapValue map[string]interface{}, values []interface{}, columns []string) {
-	for idx, column := range columns {
-		if reflectValue := reflect.Indirect(reflect.Indirect(reflect.ValueOf(values[idx]))); reflectValue.IsValid() {
-			mapValue[column] = reflectValue.Interface()
-			if valuer, ok := mapValue[column].(driver.Valuer); ok {
-				mapValue[column], _ = valuer.Value()
-			} else if b, ok := mapValue[column].(sql.RawBytes); ok {
-				mapValue[column] = string(b)
-			}
-		} else {
-			mapValue[column] = nil
-		}
-	}
+// ScanClose ScanClose
+func ScanClose(rows *ksql.Rows, db *gorm.DB, initialized bool) {
+	defer rows.Close()
+	Scan(rows, db, initialized)
 }
 
 // Scan Scan
@@ -244,5 +211,49 @@ func Scan(rows *ksql.Rows, db *gorm.DB, initialized bool) {
 
 	if db.RowsAffected == 0 && db.Statement.RaiseErrorOnNotFound {
 		db.AddError(gorm.ErrRecordNotFound)
+	}
+}
+
+// SQLArgs SQLArgs
+func SQLArgs(db *gorm.DB) (query string, args []interface{}) {
+	return db.Statement.SQL.String(), db.Statement.Vars
+}
+
+func prepareValues(values []interface{}, db *gorm.DB, columnTypes []*sql.ColumnType, columns []string) {
+	if db.Statement.Schema != nil {
+		for idx, name := range columns {
+			if field := db.Statement.Schema.LookUpField(name); field != nil {
+				values[idx] = reflect.New(reflect.PtrTo(field.FieldType)).Interface()
+				continue
+			}
+			values[idx] = new(interface{})
+		}
+	} else if len(columnTypes) > 0 {
+		for idx, columnType := range columnTypes {
+			if columnType.ScanType() != nil {
+				values[idx] = reflect.New(reflect.PtrTo(columnType.ScanType())).Interface()
+			} else {
+				values[idx] = new(interface{})
+			}
+		}
+	} else {
+		for idx := range columns {
+			values[idx] = new(interface{})
+		}
+	}
+}
+
+func scanIntoMap(mapValue map[string]interface{}, values []interface{}, columns []string) {
+	for idx, column := range columns {
+		if reflectValue := reflect.Indirect(reflect.Indirect(reflect.ValueOf(values[idx]))); reflectValue.IsValid() {
+			mapValue[column] = reflectValue.Interface()
+			if valuer, ok := mapValue[column].(driver.Valuer); ok {
+				mapValue[column], _ = valuer.Value()
+			} else if b, ok := mapValue[column].(sql.RawBytes); ok {
+				mapValue[column] = string(b)
+			}
+		} else {
+			mapValue[column] = nil
+		}
 	}
 }

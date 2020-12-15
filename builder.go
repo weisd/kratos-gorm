@@ -8,18 +8,25 @@ import (
 	"gorm.io/gorm"
 )
 
-var _db *gorm.DB
+var _sqlbuilder *gorm.DB
 
 func init() {
-	_db, _ = gorm.Open(mysql.New(mysql.Config{
-		Conn:                      &TryConn{},
-		SkipInitializeWithVersion: true,
-	}), &gorm.Config{})
+	_sqlbuilder = NewBuilder()
 }
 
 // Build Build
 func Build() *gorm.DB {
-	return _db.Session(&gorm.Session{DryRun: true})
+	return _sqlbuilder.Session(&gorm.Session{DryRun: true})
+}
+
+// NewBuilder 用gorm来创建sql
+func NewBuilder() *gorm.DB {
+	db, _ := gorm.Open(mysql.New(mysql.Config{
+		Conn:                      &TryConn{},
+		SkipInitializeWithVersion: true,
+	}), &gorm.Config{})
+
+	return db
 }
 
 // TryConn TryConn

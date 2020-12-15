@@ -12,35 +12,40 @@ import (
 // DB DB
 type DB struct {
 	*sql.DB
+	Builder *gorm.DB
 }
 
 // NewMySQL NewMySQL
 func NewMySQL(c *sql.Config) *DB {
 	db := sql.NewMySQL(c)
-	return &DB{db}
+	return &DB{DB: db, Builder: NewBuilder()}
+}
+
+// Build 返回用于生成sql的 DB
+func (d *DB) Build() *gorm.DB {
+	return d.Builder.Session(&gorm.Session{DryRun: true})
 }
 
 // Execute Execute
-func (d *DB) Execute(ctx context.Context, db *gorm.DB) {
+func (d *DB) Execute(ctx context.Context, db *gorm.DB) error {
 	if db.Error == nil {
 		sql := db.Statement.SQL.String()
 
 		switch {
 		case strings.HasPrefix(sql, "SELECT"):
-			d.GQuery(ctx, db)
+			d.doQuery(ctx, db)
 		case strings.HasPrefix(sql, "INSERT"):
-			d.GCreate(ctx, db)
+			d.doCreate(ctx, db)
 		default:
-			d.GExec(ctx, db)
+			d.doExec(ctx, db)
 		}
 	}
 
-	db.Statement.SQL.Reset()
-	db.Statement.Vars = nil
+	return db.Error
 }
 
-// GQuery GQuery
-func (d *DB) GQuery(ctx context.Context, db *gorm.DB) {
+// doQuery doQuery
+func (d *DB) doQuery(ctx context.Context, db *gorm.DB) {
 	if db.Error == nil {
 		rows, err := d.DB.Query(ctx, db.Statement.SQL.String(), db.Statement.Vars...)
 		if err != nil {
@@ -48,17 +53,15 @@ func (d *DB) GQuery(ctx context.Context, db *gorm.DB) {
 			return
 		}
 
-		defer rows.Close()
-
-		Scan(rows, db, false)
+		ScanClose(rows, db, false)
 	}
 	db.Statement.SQL.Reset()
 	db.Statement.Vars = nil
 
 }
 
-// GExec GExec/Update
-func (d *DB) GExec(ctx context.Context, db *gorm.DB) {
+// doExec doExec/Update
+func (d *DB) doExec(ctx context.Context, db *gorm.DB) {
 	if db.Error == nil {
 		result, err := d.DB.Exec(ctx, db.Statement.SQL.String(), db.Statement.Vars...)
 		if err != nil {
@@ -71,8 +74,8 @@ func (d *DB) GExec(ctx context.Context, db *gorm.DB) {
 	db.Statement.Vars = nil
 }
 
-// GCreate GCreate
-func (d *DB) GCreate(ctx context.Context, db *gorm.DB) {
+// doCreate doCreate
+func (d *DB) doCreate(ctx context.Context, db *gorm.DB) {
 	if db.Error == nil {
 		result, err := d.DB.Exec(ctx, db.Statement.SQL.String(), db.Statement.Vars...)
 		if err == nil {
